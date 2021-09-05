@@ -78,18 +78,36 @@ def split_image(image, num=5):
       result.append(image[:, i * w // num:w // num * (i + 1)])
    return result
 
-        rows = int(src.shape[0]/16 + 1)*16
-        cols = int(src.shape[1]/16 + 1)*16
 
-    
 
-        patch = np.empty((1,1,rows,cols),dtype="float32")
-        patch[0,0,:,:] = np.ones((rows,cols),dtype="float32")*255.0
-        patch[0,0,0:src.shape[0],0:src.shape[1]] = src
 
-        out = model.predict(patch, batch_size=batch_size)
-        if isinstance(out, list):
-            out = out[0]
+def test(args):
+    model = loadModel()
+    # dataLoader = dataLoader
+    # inpath = "/data/wwl/New_Manga_ST/dataset/Hdtest/HDtest_data"
+    # output = "/data/wwl/New_Manga_ST/dataset/Hdtest/line"
+    inpath = args.input_path
+    output = args.output_path
+    import os
+
+    books = os.listdir(inpath)
+    for book in books:
+        if os.path.isfile(os.path.join(output, book)):
+            continue
+        os.makedirs(os.path.join(output, book), exist_ok=True)
+        pages = os.listdir(os.path.join(inpath, book))
+        for pg in pages:
+            page = os.path.join(inpath, book, pg)
+            src = cv2.imread(page, 0)
+            rows = int(src.shape[0] / 16 + 1) * 16
+            cols = int(src.shape[1] / 16 + 1) * 16
+            patch = np.empty((1,1,rows,cols), dtype="float32")
+            patch[0,0,:, :] = np.ones((rows, cols), dtype="float32") * 255.0
+            patch[0, 0, 0:src.shape[0], 0:src.shape[1]] = src
+            patch = patch.transpose((0,2,3,1))
+            out = model.predict(patch, batch_size=batch_size)
+            if isinstance(out, list):
+                out = out[0]
 
             result_img = out[0,:,:,0]
             input_img = patch[0,:,:,0]
