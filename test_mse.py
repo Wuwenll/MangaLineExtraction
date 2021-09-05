@@ -1,26 +1,20 @@
+import argparse
 import os
-import sys
 import numpy as np
 
-import glob
 import fnmatch
-
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import cv2
 
-from keras.models import Sequential
-from keras.layers import Dense
 from keras.models import model_from_json
-
-#from model import VGG_16
-
-import theano
-theano.config.openmp = True
 
 
 from keras import backend as K
+
+
 def get_activations(model, layer, X_batch):
     get_activations = K.function([model.layers[0].input, K.learning_phase()], model.layers[layer].output)
-    activations = get_activations([X_batch,0])
+    activations = get_activations([X_batch, 0])
     return activations
 
 
@@ -30,28 +24,59 @@ def loadImages(folder):
     for root, dirnames, filenames in os.walk(folder):
         for filename in fnmatch.filter(filenames, '*'):
             matches.append(os.path.join(root, filename))
-   
     return matches
+
+class dataLoader():
+    def __init__(self,folder, batch_size = 1):
+        self.root = folder
+        matches = []
+        for root, dirnames, filenames in os.walk(folder):
+            for filename in fnmatch.filter(filenames, '*'):
+                matches.append(os.path.join(root, filename))
+        self.images = matches
+        self.batch_size = batch_size
+        self.now_point = 0
+
+    def have_next_batch(self):
+        if self.now_point == len(self.images):
+            return False
+        else:
+            return True
+
+    def next_batch(self):
+        imgs = []
+        next_point = min(self.now_point+self.batch_size,len(self.images))
+        for i in range(self.now_point,next_point):
+            src = cv2.imread(self.images[i], cv2.IMREAD_GRAYSCALE)
+            patch = np.empty((1, 1, src.shape[0], src.shape[1]), dtype="float32")
+            patch[0, 0, :, :] = np.ones((src.shape[0], src.shape[1]), dtype="float32") * 255.0
+            patch[0, 0, 0:src.shape[0], 0:src.shape[1]] = src
+            imgs.append(patch)
+        return_img = np.concatenate(imgs,axis=0)
+        self.now_point = next_point
+        return  return_img
 
 batch_size = 1
 
 
-def loadModel(home):
-# load json and create model
-    json_file = open('./erika.json', 'r')
+def loadModel():
+    # load json and create model
+    json_file = open('./erika_tf.json', 'r')
     loaded_model_json = json_file.read()
     json_file.close()
     model = model_from_json(loaded_model_json)
     # load weights into new model
-    model.load_weights("./erika_unstable.h5")
+    model.load_weights("./erika_unstable_tf.h5")
     return model
 
 
-def test(home):
-    model = loadModel(home)
-    for imname in loadImages(sys.argv[1]):
-        print(imname)
-        src = cv2.imread(imname,cv2.IMREAD_GRAYSCALE)
+
+def split_image(image, num=5):
+   h, w = image.shape
+   result = []
+   for i in range(num):
+      result.append(image[:, i * w // num:w // num * (i + 1)])
+   return result
 
         rows = int(src.shape[0]/16 + 1)*16
         cols = int(src.shape[1]/16 + 1)*16
@@ -66,20 +91,17 @@ def test(home):
         if isinstance(out, list):
             out = out[0]
 
-        result = np.zeros((rows,cols),dtype=np.float32)
+            result_img = out[0,:,:,0]
+            input_img = patch[0,:,:,0]
 
-        result = out[0,0,:,:] 
-    
-        print(np.amax(result), np.amin(result))
+            result_img[result_img > 255] = 255
+            result_img[result_img < 0] = 0
+            cv2.imwrite(os.path.join(os.path.join(output, book,pg[:-4]+".png")),np.hstack([result_img]))
 
-        result2 = cv2.normalize(result,0,255)
-
-        head, tail = os.path.split(imname)
-        #misc.imsave(sys.argv[2]+"/"+prefix+"_"+tail,result2[0:src.shape[0],0:src.shape[1]])
-
-        result[result>255] = 255
-        result[result<0] = 0
-        cv2.imwrite(sys.argv[2]+"/"+tail+".png",result[0:src.shape[0],0:src.shape[1]])
 
 if __name__ == "__main__":
-    test(sys.argv[1])
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input_path', type=str,  help='')
+    parser.add_argument('--output_path', type=str, help='')
+    args = parser.parse_args()
+    test(args)
